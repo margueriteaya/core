@@ -3,12 +3,7 @@ import { ChevronDown, Loader2, Settings } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
-import {
-  getModelList,
-  getRegistryModels,
-  type RegistryModel,
-  testConfig,
-} from '~/api/ai'
+import { getModelList, getRegistryModels, testConfig } from '~/api/ai'
 import { useI18n } from '~/i18n'
 import { Drawer } from '~/ui/feedback/drawer'
 import { Button } from '~/ui/primitives/button'
@@ -32,6 +27,7 @@ import {
   getDefaultAIModel,
   getErrorMessage,
   matchRegistryModel,
+  mergeModelOptions,
   resolvePiProviderId,
 } from '../../utils/settings'
 import { FieldShell } from '../SettingsPrimitives'
@@ -64,13 +60,19 @@ export function AIProviderDrawer(props: {
   })
 
   const registryModels = registryQuery.data ?? []
-  const registryDisabled = piProviderId === null
+  const modelOptions = useMemo(
+    () => mergeModelOptions(props.providerModels, registryModels),
+    [props.providerModels, registryModels],
+  )
   const modelMatch = useMemo(
     () =>
       provider
-        ? matchRegistryModel(registryModels, provider.defaultModel)
+        ? matchRegistryModel(
+            modelOptions.map((id) => ({ id })),
+            provider.defaultModel,
+          )
         : undefined,
-    [registryModels, provider],
+    [modelOptions, provider],
   )
   const showCustomTokenFields = Boolean(
     provider && provider.defaultModel.trim() && !modelMatch,
@@ -90,11 +92,28 @@ export function AIProviderDrawer(props: {
         props.modelCacheKey,
         (current) => ({ ...current, [provider.id]: response.models ?? [] }),
       )
+      const fetchedModels = response.models ?? []
+      if (fetchedModels.length > 0) {
+        const hasCurrentModel = fetchedModels.some(
+          (item) =>
+            item.id.trim().toLowerCase() ===
+            provider.defaultModel.trim().toLowerCase(),
+        )
+        if (!hasCurrentModel) {
+          props.onChange({ defaultModel: fetchedModels[0]!.id })
+        }
+      }
       if (response.error)
         toast.warning(
           t('settings.ai.toast.modelListError', { message: response.error }),
         )
-      else toast.success(t('settings.ai.toast.modelListUpdated'))
+      else if (fetchedModels.length > 0)
+        toast.success(
+          t('settings.ai.toast.modelListUpdated', {
+            count: fetchedModels.length,
+          }),
+        )
+      else toast.info(t('settings.ai.toast.modelListEmpty'))
     } catch (error) {
       toast.error(
         getErrorMessage(error, t('settings.ai.error.fetchModelsFailed')),
@@ -213,9 +232,8 @@ export function AIProviderDrawer(props: {
           ) : null}
           <FieldShell label={t('settings.ai.field.defaultModel')}>
             <ModelCombobox
-              disabled={registryDisabled}
               loading={registryQuery.isFetching}
-              models={registryModels}
+              models={modelOptions}
               onChange={(defaultModel) => props.onChange({ defaultModel })}
               placeholder={getAIProviderModelPlaceholder(t, provider.type)}
               value={provider.defaultModel}
@@ -262,19 +280,17 @@ export function AIProviderDrawer(props: {
 function ModelCombobox(props: {
   disabled?: boolean
   loading?: boolean
-  models: RegistryModel[]
+  models: string[]
   onChange: (value: string) => void
   placeholder?: string
   value: string
 }) {
-  const items = useMemo(() => props.models.map((m) => m.id), [props.models])
-
   return (
     <Combobox
       autoComplete="none"
       disabled={props.disabled}
       inputValue={props.value}
-      items={items}
+      items={props.models}
       onInputValueChange={(next) => props.onChange(next)}
       onValueChange={(next) => {
         if (typeof next === 'string') props.onChange(next)

@@ -252,10 +252,13 @@ export function updateSummary(id: string, data: { summary: string }) {
 }
 
 export function createSummaryTask(data: { lang?: string; refId: string }) {
-  return postJson<CreateTaskResponse, { lang?: string; refId: string }>(
-    '/ai/summaries/task',
-    data,
-  )
+  return postJson<
+    CreateTaskResponse,
+    { refId: string; targetLanguages?: string[] }
+  >('/ai/summaries/task', {
+    refId: data.refId,
+    targetLanguages: data.lang ? [data.lang] : undefined,
+  })
 }
 
 export function getInsightsGrouped(params: {

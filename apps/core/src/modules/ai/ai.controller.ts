@@ -5,6 +5,7 @@ import { Body, Get, Logger, Param, Post, Query } from '@nestjs/common'
 import { ApiController } from '~/common/decorators/api-controller.decorator'
 import { Auth } from '~/common/decorators/auth.decorator'
 import { AppErrorCode, createAppException } from '~/common/errors'
+import { AppException } from '~/common/errors/exception.types'
 import { OK_DATA } from '~/common/response/envelope.types'
 
 import { ConfigsService } from '../configs/configs.service'
@@ -16,6 +17,7 @@ import type { RegistryModelView } from './ai.views'
 import { AiViews } from './ai.views'
 import type { IModelRuntime, ModelInfo } from './runtime'
 import { createModelRuntime, createRuntimeForModelList } from './runtime'
+import { fetchOpenAICompatibleModels } from './runtime/pi-runtime.adapter'
 
 const REGISTRY_CACHE_TTL_MS = 5 * 60 * 1000
 
@@ -122,13 +124,12 @@ export class AiController {
     }
 
     try {
-      const runtime = createRuntimeForModelList(type, apiKey, endpoint)
-      const models = await this.fetchModelsFromRuntime(runtime)
+      const models = await this.resolveModels(type, apiKey, endpoint)
       return { models }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         models: [],
-        error: error.message || 'Unknown error',
+        error: (error as Error).message || 'Unknown error',
       }
     }
   }
@@ -138,7 +139,6 @@ export class AiController {
   async testProviderConnection(
     @Body() body: TestConnectionDto,
   ): Promise<{ ok: boolean }> {
-    const { providerId } = body
     const { type, apiKey, endpoint, model } = await this.resolveTestConfig(body)
 
     if (!type) {
@@ -160,25 +160,22 @@ export class AiController {
     }
 
     try {
-      const runtime = createModelRuntime({
-        id: providerId || 'test',
-        name: providerId || 'test',
-        type,
-        apiKey,
-        endpoint,
-        defaultModel: model,
-        enabled: true,
-      })
-
-      await runtime.generateText({
-        prompt: 'Say "ok".',
-        maxRetries: 0,
-      })
+      const models = await this.resolveModels(type, apiKey, endpoint)
+      if (
+        !models.some(
+          (item) => item.id.trim().toLowerCase() === model.trim().toLowerCase(),
+        )
+      ) {
+        throw createAppException(AppErrorCode.AI_SERVICE_ERROR, {
+          message: `Model "${model}" is not available for this endpoint`,
+        })
+      }
 
       return OK_DATA
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof AppException) throw error
       throw createAppException(AppErrorCode.AI_SERVICE_ERROR, {
-        message: error?.message || 'AI test failed',
+        message: (error as Error).message || 'AI test failed',
       })
     }
   }
@@ -280,6 +277,23 @@ export class AiController {
       endpoint: body.endpoint ?? storedProvider?.endpoint,
       model: body.model ?? storedProvider?.defaultModel,
     }
+  }
+
+  // ponytail: single helper for both listModels and testConnection
+  private async resolveModels(
+    type: AIProviderType,
+    apiKey: string,
+    endpoint?: string,
+  ): Promise<ModelInfo[]> {
+    if (
+      endpoint?.trim() &&
+      (type === AIProviderType.OpenAICompatible ||
+        type === AIProviderType.Generic)
+    ) {
+      return fetchOpenAICompatibleModels(endpoint, apiKey)
+    }
+    const runtime = createRuntimeForModelList(type, apiKey, endpoint)
+    return this.fetchModelsFromRuntime(runtime)
   }
 
   @Get('/models/:providerId')

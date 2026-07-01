@@ -216,8 +216,10 @@ export function resolvePiProviderId(provider: {
       const host = new URL(endpoint).hostname.toLowerCase()
       if (PI_PROVIDER_HOSTNAMES[host]) return PI_PROVIDER_HOSTNAMES[host]
     } catch {
-      // not a parseable URL — fall through to type fallback
+      /* invalid URL */
     }
+    // ponytail: unknown host or bad URL — only Anthropic has a known fallback
+    return provider.type === 'anthropic' ? 'anthropic' : null
   }
   switch (provider.type) {
     case 'anthropic': {
@@ -239,6 +241,25 @@ export function matchRegistryModel(
   const target = modelId.trim().toLowerCase()
   if (!target) return undefined
   return (models ?? []).find((m) => m.id.trim().toLowerCase() === target)
+}
+
+export function mergeModelOptions(
+  fetchedModels: Array<{ id: string }> | undefined,
+  registryModels: Array<{ id: string }> | undefined,
+) {
+  const seen = new Set<string>()
+  const merged: string[] = []
+
+  for (const model of [...(fetchedModels ?? []), ...(registryModels ?? [])]) {
+    const id = model.id.trim()
+    if (!id) continue
+    const key = id.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.push(id)
+  }
+
+  return merged
 }
 
 export function getErrorMessage(error: unknown, fallback: string) {

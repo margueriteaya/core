@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   coerceAIProviderType,
   matchRegistryModel,
+  mergeModelOptions,
   resolvePiProviderId,
 } from './settings'
 
@@ -40,7 +41,7 @@ describe('resolvePiProviderId', () => {
         endpoint: 'https://my-internal.example.com',
         type: 'openai-compatible',
       }),
-    ).toBe('openai')
+    ).toBeNull()
     expect(
       resolvePiProviderId({
         endpoint: 'https://example.com',
@@ -69,6 +70,12 @@ describe('resolvePiProviderId', () => {
     expect(
       resolvePiProviderId({ endpoint: 'not a url', type: 'anthropic' }),
     ).toBe('anthropic')
+    expect(
+      resolvePiProviderId({
+        endpoint: 'not a url',
+        type: 'openai-compatible',
+      }),
+    ).toBeNull()
   })
 })
 
@@ -116,6 +123,17 @@ describe('coerceAIProviderType', () => {
     expect(coerceAIProviderType('something-else')).toBe('openai-compatible')
     expect(coerceAIProviderType(undefined)).toBe('openai-compatible')
     expect(coerceAIProviderType(null)).toBe('openai-compatible')
+  })
+})
+
+describe('mergeModelOptions', () => {
+  it('keeps endpoint models first and de-duplicates case-insensitively', () => {
+    expect(
+      mergeModelOptions(
+        [{ id: 'gemini-2.5-pro' }, { id: 'gemini-2.5-flash' }],
+        [{ id: 'GEMINI-2.5-PRO' }, { id: 'gpt-4o' }],
+      ),
+    ).toEqual(['gemini-2.5-pro', 'gemini-2.5-flash', 'gpt-4o'])
   })
 })
 

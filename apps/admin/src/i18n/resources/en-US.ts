@@ -1866,7 +1866,9 @@ export const enUS = {
   'settings.ai.test.languageExists': 'Language {language} already exists',
   'settings.ai.test.placeholder': 'e.g. en, ja, ko',
   'settings.ai.toast.modelListError': 'Fetch model list: {message}',
-  'settings.ai.toast.modelListUpdated': 'Model list updated',
+  'settings.ai.toast.modelListUpdated': 'Model list updated ({{count}})',
+  'settings.ai.toast.modelListEmpty':
+    'No models were returned from this endpoint',
   'settings.ai.toast.needDefaultModel':
     'Please fill in the default model first',
   'settings.ai.toast.testSuccess': 'Connection works',

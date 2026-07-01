@@ -5,12 +5,14 @@ import {
   fauxToolCall,
   Type,
 } from '@earendil-works/pi-ai'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { withFauxAi } from '@/helper/faux-ai.helper'
 import { AIProviderType } from '~/modules/ai/ai.types'
 import {
   deriveProviderId,
+  normalizeOpenAICompatibleBaseUrl,
+  normalizeOpenAICompatibleModelId,
   PiRuntimeAdapter,
 } from '~/modules/ai/runtime/pi-runtime.adapter'
 
@@ -77,6 +79,7 @@ function track<T extends AdapterHandle>(handle: T): T {
 
 afterEach(() => {
   while (handles.length) handles.pop()!.teardown()
+  vi.restoreAllMocks()
 })
 
 function adapterWithResponses(
@@ -176,6 +179,65 @@ describe('PiRuntimeAdapter', () => {
     it('falls back to type-based on invalid URL', () => {
       expect(deriveProviderId('not-a-url', AIProviderType.Anthropic)).toBe(
         'anthropic',
+      )
+    })
+  })
+
+  describe('normalizeOpenAICompatibleBaseUrl', () => {
+    it('keeps caller base path and only trims trailing slashes', () => {
+      expect(normalizeOpenAICompatibleBaseUrl()).toBe(
+        'https://api.openai.com/v1',
+      )
+      expect(
+        normalizeOpenAICompatibleBaseUrl('https://example.com/openai/'),
+      ).toBe('https://example.com/openai')
+    })
+  })
+
+  describe('normalizeOpenAICompatibleModelId', () => {
+    it('strips Gemini models/ prefix for OpenAI-compatible requests', () => {
+      expect(
+        normalizeOpenAICompatibleModelId(
+          'https://generativelanguage.googleapis.com/v1beta/openai/',
+          'models/gemini-2.5-flash',
+        ),
+      ).toBe('gemini-2.5-flash')
+      expect(
+        normalizeOpenAICompatibleModelId(
+          'https://api.openai.com/v1',
+          'models/gemini-2.5-flash',
+        ),
+      ).toBe('models/gemini-2.5-flash')
+    })
+  })
+
+  describe('listModels', () => {
+    it('fetches endpoint models for custom openai-compatible providers', async () => {
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [{ id: 'models/gemini-2.5-flash' }, { id: 'gemini-pro' }],
+        }),
+      } as Response)
+      const adapter = new PiRuntimeAdapter({
+        apiKey: 'faux-api-key',
+        endpoint: 'https://example.com/openai/',
+        model: MODEL_ID,
+        providerType: AIProviderType.OpenAICompatible,
+        providerId: 'custom-provider',
+      })
+
+      await expect(adapter.listModels()).resolves.toEqual([
+        { id: 'models/gemini-2.5-flash', name: 'models/gemini-2.5-flash' },
+        { id: 'gemini-pro', name: 'gemini-pro' },
+      ])
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://example.com/openai/models',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer faux-api-key',
+          }),
+        }),
       )
     })
   })
@@ -401,6 +463,27 @@ describe('PiRuntimeAdapter', () => {
         api: FAUX_API,
         baseUrl: 'https://api.example.com/v1',
         provider: 'openai',
+      })
+    })
+
+    it('normalizes Gemini OpenAI-compatible model ids before runtime requests', () => {
+      const faux = withFauxAi({
+        api: FAUX_API,
+        provider: 'openai',
+        models: [{ id: 'gemini-2.5-flash', name: 'gemini-2.5-flash' }],
+      })
+      const adapter = new PiRuntimeAdapter({
+        apiKey: 'faux-api-key',
+        endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+        model: 'models/gemini-2.5-flash',
+        providerType: AIProviderType.OpenAICompatible,
+        providerId: 'gemini-openai',
+      })
+      track({ adapter, teardown: () => faux.teardown() })
+
+      expect(adapter.providerInfo.model).toBe('gemini-2.5-flash')
+      expect(inspect(adapter).model).toMatchObject({
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
       })
     })
 

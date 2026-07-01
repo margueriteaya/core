@@ -1,3 +1,6 @@
+// ponytail: pi-ai doesn't expose customFetch, so we must patch globally.
+// Gemini's OpenAI-compat endpoint rejects the `store` field that Vercel AI SDK
+// started sending. Strip it for non-OpenAI endpoints only.
 import type {
   Api,
   AssistantMessage,
@@ -42,6 +45,29 @@ import type {
   TextStreamChunk,
 } from './types'
 
+;(function patchFetchForCompatEndpoints() {
+  const orig = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    if (
+      init?.body &&
+      typeof init.body === 'string' &&
+      String(input).includes('chat/completions') &&
+      !String(input).includes('api.openai.com')
+    ) {
+      try {
+        const b = JSON.parse(init.body)
+        if (b.store !== undefined) {
+          delete b.store
+          init.body = JSON.stringify(b)
+        }
+      } catch {
+        /* not JSON, pass through */
+      }
+    }
+    return orig(input, init)
+  }
+})()
+
 export { isContextOverflow }
 
 const STRUCTURED_TOOL_NAME = 'structured_output'
@@ -54,6 +80,69 @@ const HOSTNAME_TO_PROVIDER_ID: Record<string, string> = {
   'api.deepseek.com': 'deepseek',
   'api.openai.com': 'openai',
   'api.anthropic.com': 'anthropic',
+}
+
+export function normalizeOpenAICompatibleBaseUrl(endpoint?: string): string {
+  const trimmed = endpoint?.trim()
+  if (!trimmed) {
+    return 'https://api.openai.com/v1'
+  }
+  return trimmed.replace(/\/+$/, '')
+}
+
+export function normalizeOpenAICompatibleModelId(
+  endpoint: string | undefined,
+  modelId: string,
+): string {
+  const trimmed = modelId.trim()
+  if (!trimmed) return trimmed
+
+  try {
+    const host = endpoint ? new URL(endpoint).hostname.toLowerCase() : ''
+    if (
+      host === 'generativelanguage.googleapis.com' &&
+      trimmed.startsWith('models/')
+    ) {
+      return trimmed.slice('models/'.length)
+    }
+  } catch {
+    // keep caller model id on invalid endpoint
+  }
+
+  return trimmed
+}
+
+export async function fetchOpenAICompatibleModels(
+  endpoint: string,
+  apiKey: string,
+): Promise<ModelInfo[]> {
+  const response = await fetch(
+    `${normalizeOpenAICompatibleBaseUrl(endpoint)}/models`,
+    {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    },
+  )
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `Model list request failed with status ${response.status}`,
+    )
+  }
+  const payload = (await response.json()) as {
+    data?: Array<{ id?: unknown; created?: unknown }>
+  }
+  return Array.isArray(payload.data)
+    ? payload.data
+        .map((item) => ({
+          created: typeof item.created === 'number' ? item.created : undefined,
+          id: typeof item.id === 'string' ? item.id : '',
+          name: typeof item.id === 'string' ? item.id : '',
+        }))
+        .filter((item) => item.id.length > 0)
+    : []
 }
 
 function fallbackProviderId(type: AIProviderType): string {
@@ -145,18 +234,24 @@ export class PiRuntimeAdapter implements IModelRuntime {
   private readonly piProviderId: string
   private readonly model: Model<Api>
   private readonly apiKey: string
+  private readonly endpoint?: string
 
   constructor(config: PiRuntimeAdapterConfig) {
+    const normalizedModel = normalizeOpenAICompatibleModelId(
+      config.endpoint,
+      config.model,
+    )
     this.providerInfo = {
       id: config.providerId,
       type: config.providerType,
-      model: config.model,
+      model: normalizedModel,
     }
     this.apiKey = config.apiKey
+    this.endpoint = config.endpoint
     this.api = providerTypeToApi(config.providerType)
     this.piProviderId = deriveProviderId(config.endpoint, config.providerType)
     this.model = this.resolveModel(
-      config.model,
+      normalizedModel,
       config.endpoint,
       config.contextWindow ?? undefined,
       config.maxTokens ?? undefined,
@@ -169,7 +264,10 @@ export class PiRuntimeAdapter implements IModelRuntime {
     contextWindow?: number,
     maxTokens?: number,
   ): Model<Api> {
-    const baseUrl = endpoint?.trim()
+    let baseUrl = endpoint?.trim()
+    if (baseUrl) {
+      baseUrl = baseUrl.replace(/\/+$/, '')
+    }
     try {
       const registered = getModel(
         this.piProviderId as never,
@@ -199,7 +297,10 @@ export class PiRuntimeAdapter implements IModelRuntime {
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: contextWindow ?? DEFAULT_CONTEXT_WINDOW,
       maxTokens: maxTokens ?? DEFAULT_MAX_TOKENS,
-      compat: undefined,
+      compat:
+        this.providerInfo.type === AIProviderType.OpenAICompatible
+          ? 'compatible'
+          : undefined,
     } as Model<Api>
   }
 
@@ -582,6 +683,13 @@ export class PiRuntimeAdapter implements IModelRuntime {
 
   async listModels(): Promise<ModelInfo[]> {
     try {
+      if (
+        this.endpoint?.trim() &&
+        (this.providerInfo.type === AIProviderType.OpenAICompatible ||
+          this.providerInfo.type === AIProviderType.Generic)
+      ) {
+        return await fetchOpenAICompatibleModels(this.endpoint, this.apiKey)
+      }
       const models = getModels(this.piProviderId as never) as Model<Api>[]
       return models.map((m) => ({ id: m.id, name: m.name }))
     } catch (error) {

@@ -16,6 +16,10 @@ import type { AIProviderConfig } from '../ai.types'
 import { AIProviderType } from '../ai.types'
 import { createModelRuntime } from '../runtime'
 import { convert as convertJsonSchema } from '../runtime/json-schema-to-typebox'
+import {
+  normalizeOpenAICompatibleBaseUrl,
+  normalizeOpenAICompatibleModelId,
+} from '../runtime/pi-runtime.adapter'
 import { AiAgentConversationRepository } from './ai-agent-conversation.repository'
 
 const AI_SDK_ATTRIBUTION_HEADERS = {
@@ -471,7 +475,7 @@ export class AiAgentChatService {
     }))
 
     const body: Record<string, unknown> = {
-      model,
+      model: normalizeOpenAICompatibleModelId(provider.endpoint, model),
       stream: true,
       messages: openaiMessages,
     }
@@ -479,18 +483,8 @@ export class AiAgentChatService {
       body.tools = openaiTools
     }
 
-    let baseUrl: string
-    if (provider.endpoint) {
-      baseUrl = provider.endpoint
-      if (!baseUrl.endsWith('/v1')) {
-        baseUrl = `${baseUrl.replace(/\/+$/, '')}/v1`
-      }
-    } else {
-      baseUrl = 'https://api.openai.com/v1'
-    }
-
     return {
-      url: `${baseUrl}/chat/completions`,
+      url: `${normalizeOpenAICompatibleBaseUrl(provider.endpoint)}/chat/completions`,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${provider.apiKey}`,
