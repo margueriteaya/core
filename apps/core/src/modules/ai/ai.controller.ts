@@ -139,6 +139,7 @@ export class AiController {
   async testProviderConnection(
     @Body() body: TestConnectionDto,
   ): Promise<{ ok: boolean }> {
+    const { providerId } = body
     const { type, apiKey, endpoint, model } = await this.resolveTestConfig(body)
 
     if (!type) {
@@ -160,16 +161,39 @@ export class AiController {
     }
 
     try {
-      const models = await this.resolveModels(type, apiKey, endpoint)
       if (
-        !models.some(
-          (item) => item.id.trim().toLowerCase() === model.trim().toLowerCase(),
-        )
+        endpoint?.trim() &&
+        (type === AIProviderType.OpenAICompatible ||
+          type === AIProviderType.Generic)
       ) {
-        throw createAppException(AppErrorCode.AI_SERVICE_ERROR, {
-          message: `Model "${model}" is not available for this endpoint`,
-        })
+        const models = await this.resolveModels(type, apiKey, endpoint)
+        if (
+          !models.some(
+            (item) =>
+              item.id.trim().toLowerCase() === model.trim().toLowerCase(),
+          )
+        ) {
+          throw createAppException(AppErrorCode.AI_SERVICE_ERROR, {
+            message: `Model "${model}" is not available for this endpoint`,
+          })
+        }
+        return OK_DATA
       }
+
+      const runtime = createModelRuntime({
+        id: providerId || 'test',
+        name: providerId || 'test',
+        type,
+        apiKey,
+        endpoint,
+        defaultModel: model,
+        enabled: true,
+      })
+
+      await runtime.generateText({
+        prompt: 'Say "ok".',
+        maxRetries: 0,
+      })
 
       return OK_DATA
     } catch (error: unknown) {
