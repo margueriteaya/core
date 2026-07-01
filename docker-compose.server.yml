@@ -31,8 +31,8 @@ x-mx-env: &mx-env
   DISABLE_CACHE: ${DISABLE_CACHE:-false}
 
   # Debug (optional)
-  DEBUG: ${DEBUG:-false}
-  DEBUG_MEMORY_DUMP: ${DEBUG_MEMORY_DUMP:-false}
+  DEBUG: ${DEBUG:-true}
+  DEBUG_MEMORY_DUMP: ${DEBUG_MEMORY_DUMP:-true}
 
 services:
   mx-core:
