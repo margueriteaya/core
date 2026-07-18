@@ -95,7 +95,7 @@ export type AIContentFormat = 'lexical' | 'markdown' | string
 export interface AITranslation {
   aiModel?: string
   aiProvider?: string
-  content?: string
+  content?: string | null
   contentFormat?: AIContentFormat
   createdAt: string
   hash: string
@@ -158,6 +158,7 @@ export interface ProviderModelsResponse {
 
 export interface AITestData {
   apiKey?: string
+  appendV1?: boolean
   endpoint?: string
   model?: string
   providerId: string
@@ -167,6 +168,7 @@ export interface AITestData {
 export interface AIModelListData {
   apiKey?: string
   endpoint?: string
+  modelListUrl?: string
   providerId: string
   type: string
 }
