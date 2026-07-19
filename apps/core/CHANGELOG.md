@@ -1,4 +1,38 @@
-# [13.14.1](https://github.com/mx-space/core/compare/v13.14.0...v13.14.1) (2026-07-17)
+## [13.16.1](https://github.com/mx-space/core/compare/v13.16.0...v13.16.1) (2026-07-19)
+
+
+### Bug Fixes
+
+* **ai:** omit reasoning param for OpenRouter mandatory-reasoning models ([e899ef0](https://github.com/mx-space/core/commit/e899ef0899bbb70298380ed292382460004e5278))
+
+# [13.16.0](https://github.com/mx-space/core/compare/v13.15.1...v13.16.0) (2026-07-19)
+
+
+### Features
+
+* **companion:** publish moments to recently ([87ae308](https://github.com/mx-space/core/commit/87ae308e5f54199b4fa65cdc849e643b141d2254))
+
+## [13.15.1](https://github.com/mx-space/core/compare/v13.15.0...v13.15.1) (2026-07-19)
+
+
+### Bug Fixes
+
+* **membership:** guide payment provider setup ([c13093f](https://github.com/mx-space/core/commit/c13093f6893646e6486063d0d87c3ab9472ee1c6))
+
+# [13.15.0](https://github.com/mx-space/core/compare/v13.14.1...v13.15.0) (2026-07-19)
+
+
+### Bug Fixes
+
+* **ai:** curb zh→ja translationese in chunk translation prompt ([ef8d085](https://github.com/mx-space/core/commit/ef8d08503963a166487e93cb20bf3925238ac88c))
+* **ai:** stabilize translation editing ([1793aa3](https://github.com/mx-space/core/commit/1793aa3200f39321e5f707b274ca4e4d8829ce2a))
+
+
+### Features
+
+* paid articles via membership subscription ([#2769](https://github.com/mx-space/core/issues/2769)) ([04c082f](https://github.com/mx-space/core/commit/04c082f3faa8a97e44bd4ed3753abccb6d384f74))
+
+## [13.14.1](https://github.com/mx-space/core/compare/v13.14.0...v13.14.1) (2026-07-17)
 
 
 ### Features
@@ -12,7 +46,7 @@
 
 * **companion:** support Live Desk artwork ([1af22ad](https://github.com/mx-space/core/commit/1af22adac0c6d997cbd916ea13d5ddfe2d35d583))
 
-# [13.13.1](https://github.com/mx-space/core/compare/v13.13.0...v13.13.1) (2026-07-17)
+## [13.13.1](https://github.com/mx-space/core/compare/v13.13.0...v13.13.1) (2026-07-16)
 
 
 ### Bug Fixes
